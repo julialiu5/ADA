@@ -1,0 +1,9 @@
+"","Delivery_Method","Gestational_Diabetes","Mother_Race","Births","n"
+"1","Cesarean","Yes","AIAN",1299,3586
+"2","Cesarean","Yes","Asian",12824,32878
+"3","Cesarean","Yes","Black or African American",15841,33113
+"4","Cesarean","Yes","White",74811,181320
+"5","Cesarean","No","AIAN",9202,32717
+"6","Cesarean","No","Asian",69287,218977
+"7","Cesarean","No","Black or African American",197955,566382
+"8","Cesarean","No","White",770605,2559556

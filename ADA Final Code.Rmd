@@ -1,0 +1,269 @@
+---
+title: "ADA Final"
+author: "Julia Liu"
+date: "10/25/2020"
+output: html_document
+---
+
+```{r}
+
+#installing the packages and loading them to read CSV files
+install.packages("readr") 
+
+library(readr)
+
+#uploading the files
+natalityvaginalcsection <- read_csv("NatalityVaginalCsection.csv")
+
+```
+```{r}
+#looking at the column names in the entire dataset
+colnames(natalityvaginalcsection)
+
+
+#pulling out the columns needed into a brand new dataframe 
+natalityvc <- natalityvaginalcsection[, c("Delivery Method Code", "Gestational Diabetes Code", "Mother's Single Race 6 Code", "Births")]
+
+#loading tidyverse to start recode
+#if you haven't downloaded these packages before
+
+#install.packages("tidyverse")
+#install.packages("dplyr")
+library(tidyverse)
+library(dplyr)
+
+
+#renaming the column names, : dataframe <- dataframe %>% rename(WHATEVER NAME YOU WANT = NAME OF THE COLUMNS)
+
+natalityvc <- natalityvc %>% rename(Gestational_Diabetes = `Gestational Diabetes Code`, Mother_Race = `Mother's Single Race 6 Code`, Delivery_Method = `Delivery Method Code`)
+
+#checking if the renaming columns worked
+colnames(natalityvc)
+#all correct
+
+#Need to recode the variables
+#Recoding for Mother's Single Race
+natalityvc$Mother_Race
+
+#Vaginal is originally 1, and C sections is 2. Recode c sections as 1
+natalityvc$Delivery_Method[natalityvc$Delivery_Method==1]<-0
+natalityvc$Delivery_Method[natalityvc$Delivery_Method==2]<-1
+
+#So this puts a label on top of the number to make it easily appealing and easy to remember. but when you run the codes, it's still taking into the account the 1 and 0, just follow the number with the label in the same order 
+natalityvc$Delivery_Method<-factor(natalityvc$Delivery_Method, levels=c(0,1), labels=c("Vaginal","Cesarean"))
+
+#recoding gestational diabetes
+natalityvc$Gestational_Diabetes[natalityvc$Gestational_Diabetes==1]<-1
+natalityvc$Gestational_Diabetes[natalityvc$Gestational_Diabetes==2]<-0
+
+natalityvc$Gestational_Diabetes<-factor(natalityvc$Gestational_Diabetes, levels=c(0,1), labels=c("No","Yes"))
+
+#recode race
+natalityvc$Mother_Race[natalityvc$Mother_Race=='1002-5']<-1
+natalityvc$Mother_Race[natalityvc$Mother_Race=='A']<-2
+natalityvc$Mother_Race[natalityvc$Mother_Race=='2054-5']<-3
+natalityvc$Mother_Race[natalityvc$Mother_Race=='2106-3']<-0
+
+natalityvc$Mother_Race<-factor(natalityvc$Mother_Race, levels=c(0,1,2,3), labels=c("White", "AIAN", "Asian", "Black or African American"))
+
+
+#Removing the NA from Gestational Diabetes
+#any NA in gestational diabetes, removes the entire row 
+natalityvc <- natalityvc %>% filter(!is.na(Gestational_Diabetes))
+natalityvc <- natalityvc %>% filter(!is.na(Mother_Race))
+
+
+```
+```{r}
+natalityvc$n <- c(3586, 32878, 33113, 181320, 32717, 218977, 566382, 2559556, 3586, 32878, 33113, 181320, 32717, 218977, 566382, 2559556)
+```
+```{r}
+natalityvc <- natalityvc[!(natalityvc$Delivery_Method=="Vaginal"),]
+```
+
+
+```{r}
+#Loading libraries for poisson models
+library(MASS)
+library(ggplot2)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+library(foreign)
+```
+```{r}
+#Creating a RR function for generating IRRs and 95% CIs for Poisson models only
+glm.RR <- function(GLM.RESULT, digits = 2) {
+
+    if (GLM.RESULT$family$family == "binomial") {
+        LABEL <- "OR"
+    } else if (GLM.RESULT$family$family == "poisson") {
+        LABEL <- "RR"
+    } else {
+        stop("Not logistic or Poisson model")
+    }
+
+    COEF      <- stats::coef(GLM.RESULT)
+    CONFINT   <- stats::confint(GLM.RESULT)
+    TABLE     <- cbind(coef=COEF, CONFINT)
+    TABLE.EXP <- round(exp(TABLE), digits)
+
+    colnames(TABLE.EXP)[1] <- LABEL
+
+    TABLE.EXP
+}
+```
+```{r}
+distribution <- density(natalityvc$Births)
+plot(distribution, xlin=c(1,20,000))
+```
+
+
+```{r}
+#Getting the mean count of c sections in gestational diabetes vs not having gestational diabetes
+#incidence of c sections in gestational diabetes vs incidence of c sections without gestational diabetes 
+
+#without offset, without adjusting for mother's race
+Cases <- glm(Births ~ Gestational_Diabetes, family = "poisson", data = natalityvc)
+summary(Cases)
+
+#IRR and 95%
+glm.RR(Cases, 3)
+#Cesarean: The incidence rate of birth of having a cesarean section is __ lower than the incidence rate of birth in vaginal deliveries
+```
+```{r}
+#without offset, with adjusting for mother's race
+Cases1 <- glm(Births ~ Gestational_Diabetes+Mother_Race, family = "poisson", data = natalityvc)
+summary(Cases1)
+
+#IRR and 95%
+glm.RR(Cases1, 3)
+```
+
+
+```{r}
+#with offset, without adjusting for mother's race
+cases2 <- glm(Births ~ Gestational_Diabetes, offset = log(n), family=poisson(link = "log"), data = natalityvc)
+summary(cases2)
+
+#IRR and 95%
+glm.RR(cases2, 3)
+```
+```{r}
+#with offset, with adjusting for mother's race
+cases3 <- glm(Births ~ Gestational_Diabetes+Mother_Race, offset = log(n), family=poisson(link = "log"), data = natalityvc)
+summary(cases3)
+
+#IRR and 95%
+glm.RR(cases3, 3)
+```
+
+```{r}
+install.packages("pastecs")
+library(pastecs)
+```
+
+```{r}
+stat.desc(natalityvc$Births)
+#variance is greater than mean
+```
+```{r}
+stat.desc(natalityvc$n)
+
+#variance is greater than mean
+```
+```{r}
+#testing for overdispersion
+overmodel <- glm.nb(Births ~ Gestational_Diabetes + Mother_Race + offset(log(n)), data = natalityvc)
+summary(overmodel)
+
+
+```
+```{r}
+lrtest(cases3, overmodel)
+#Should use negative binomial 
+```
+```{r}
+(confidentintervals <- cbind(Estimate = coef(overmodel), confint(overmodel)))
+```
+```{r}
+exp(confidentintervals)
+```
+```{r}
+#Checking interaction effect between gestational diabetes and AIAN
+ie_gdm <- glm.nb(Births ~ Gestational_Diabetes + Mother_Race + Gestational_Diabetes*Mother_Race + offset(log(n)), data = natalityvc)
+summary(ie_gdm)
+
+```
+
+
+```{r}
+ie_nbm <- addterm(overmodel, . ~ . * Mother_Race,test="Chisq")
+summary(ie_nbm)
+```
+
+```{r}
+#uploading the files
+AIAN_natality2 <- natalityvc[c(1,5), ]
+asian_natality2 <- natalityvc[c(2,6), ]
+black_natality2 <- natalityvc[c(3,7), ]
+white_natality2 <- natalityvc[c(4,8), ]
+
+
+#Removing the NA from Gestational Diabetes
+#any NA in gestational diabetes, removes the entire row 
+AIAN_natality2 <- AIAN_natality2 %>% filter(!is.na(Gestational_Diabetes))
+AIAN_natality2 <- AIAN_natality2 %>% filter(!is.na(Mother_Race))
+AIAN_natality2 <- AIAN_natality2 %>% filter(!is.na(Births))
+AIAN_natality2 <- AIAN_natality2 %>% filter(!is.na(n))
+AIAN_natality2 <- AIAN_natality2 %>% filter(!is.na(Delivery_Method))
+```
+```{r}
+#Stratifying it to Asian
+AIAN_IRR <- glm.nb(Births ~ Gestational_Diabetes, data = AIAN_natality2)
+summary(AIAN_IRR)
+
+#Error in while ((it <- it + 1) < limit && abs(del) > eps) { : missing value where TRUE/FALSE needed
+
+(AIANCI <- cbind(Estimate = coef(AIAN_RR), confint(AIAN_RR)))
+exp(AIANCI)
+```
+```{r}
+asian_IRR <- glm.nb(Births ~ Gestational_Diabetes, data = asian_natality2)
+summary(asian_IRR)
+
+(asian_irrc <- cbind(Estimate = coef(asian_IRR), confint(asian_IRR)))
+```
+```{r}
+#poisson with black, stratified
+poissonblack <- glm(Births ~ Gestational_Diabetes, offset = log(n), family=poisson(link = "log"), data = black_natality2)
+summary(poissonblack)
+
+#IRR and 95%
+glm.RR(poissonblack, 3)
+```
+```{r}
+#poisson with aian, stratified
+poissonaian <- glm(Births ~ Gestational_Diabetes, offset = log(n), family=poisson(link = "log"), data = AIAN_natality2)
+summary(poissonaian)
+
+#IRR and 95%
+glm.RR(poissonaian, 3)
+```
+```{r}
+#poisson with asian, stratified
+poissonasian <- glm(Births ~ Gestational_Diabetes, offset = log(n), family=poisson(link = "log"), data = asian_natality2)
+summary(poissonasian)
+
+#IRR and 95%
+glm.RR(poissonasian, 3)
+```
+```{r}
+aian_IRR <- glm.nb(Births ~ Gestational_Diabetes, data = AIAN_natality2)
+summary(aian_IRR)
+```
+```{r}
+black_irr <- glm.nb(Births ~ Gestational_Diabetes, data = black_natality2)
+summary(black_irr)
+```
+
